@@ -1,0 +1,12 @@
+ans=input('name'+'的main角是哪隻?')
+# 遊戲基本資料
+name = "nagi" 
+mainc = "莉莉亞"
+mainc2 = '死歌'
+# print(name+"的main角是"+mainc)
+if ans == 'mainc':
+    print('睡了')
+elif ans == 'mainc2':
+    print('唱哪')
+else:
+    print('他不會')
