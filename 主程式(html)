@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地理資料分析器</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+      body {
+        font-family: 'Roboto', sans-serif;
+        background-color: #dff7ba; 
+        color: #333; 
+        margin: 0;
+        padding: 20px;
+      }
+
+      h2 {
+        color: #1d260f; 
+      }
+
+      h3 {
+        color: #1d260f;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        font-size: 1rem;
+      }
+
+      th, td {
+        padding: 12px;
+        border: 1px solid #99e64d; 
+      }
+
+      th {
+        background-color: #99e64d; 
+        color: #000; 
+      }
+
+      tr:nth-child(even) {
+        background-color: #e6f9cb; 
+      }
+
+      tr:hover {
+        background-color: #c9f7a5; 
+      }
+
+
+      button {
+        background-color: #99e64d; 
+        color: #000; 
+        border: none;
+        border-radius: 5px;
+        padding: 10px 15px;
+        cursor: pointer;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        transition: background-color 0.3s ease;
+        font-size: 1rem;
+      }
+
+      button:hover {
+        background-color: #82d447; 
+      }
+
+      input[type="datetime-local"] {
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 1rem;
+        margin-right: 10px;
+      }
+
+      @media (max-width: 768px) {
+        #map {
+          height: 300px;
+        }
+        table {
+          font-size: 0.9rem;
+        }
+      }
+    </style>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=///////////////////&callback=initMap" async defer></script>
+    <script>
+      let map;
+      let marker;
+      let geocoder;
+      let elevator;
+      let latitude, longitude, address, elevation;
+
+      function initMap() {                                    // 地圖設定
+        const mapOptions = {
+          center: { lat: 23.4708, lng: 120.9567 },
+          zoom: 8, 
+        };
+
+        map = new google.maps.Map(document.getElementById("map"), mapOptions);
+
+        geocoder = new google.maps.Geocoder();
+        elevator = new google.maps.ElevationService();
+
+        map.addListener("click", (event) => {
+          const latLng = event.latLng;
+          placeMarker(latLng);
+          displayCoordinates(latLng);
+          geocodeLatLng(geocoder, latLng);
+          getElevation(latLng);
+        });
+      }
+
+      function placeMarker(location) {                        // 標誌設定
+        if (marker) {
+          marker.setPosition(location);
+        } else {
+          marker = new google.maps.Marker({
+            position: location,
+            map: map,
+          });
+        }
+      }
+
+      function displayCoordinates(latLng) {                   // 經緯度設定
+        latitude = latLng.lat();
+        longitude = latLng.lng();
+        document.getElementById("coordinates").innerHTML = `緯度: ${latitude}, 經度: ${longitude}`;
+      }
+
+      function geocodeLatLng(geocoder, latLng) {             // 行政區設定
+        geocoder.geocode({ location: latLng }, (results, status) => {
+          if (status === "OK") {
+            if (results[0]) {
+              const addressComponents = results[0].address_components;
+
+              let city = "";     
+              let district = ""; 
+
+              addressComponents.forEach(component => {
+                const types = component.types;
+
+                if (types.includes("administrative_area_level_1")) {
+                  city = component.long_name;
+                } else if (types.includes("administrative_area_level_2")) {
+                  district = component.long_name;
+                }
+              });
+
+              address = `${city}, ${district}`;
+              document.getElementById("location").innerHTML = `目前標誌位置: ${address}`;
+            } else {
+              document.getElementById("location").innerHTML = "位置錯誤";
+            }
+          } else {
+            document.getElementById("location").innerHTML = `位置錯誤: ${status}`;
+          }
+        });
+      }
+
+      function getElevation(latLng) {                        // 海拔設定
+        elevator.getElevationForLocations({
+          locations: [latLng],
+        }, (results, status) => {
+          if(status === "OK") {
+            if(results[0]){
+              elevation = results[0].elevation.toFixed(2);
+              document.getElementById("elevation").innerHTML = `目前標誌海拔高度: ${elevation} 公尺`;
+            } else {
+              document.getElementById("elevation").innerHTML = "海拔錯誤";
+            }
+          } else {
+            document.getElementById("elevation").innerHTML = `海拔錯誤: ${status}`;
+          }
+        });
+      }
+
+
+      function setInitialTime() {                            // 時間設定
+        const now = new Date();
+        const timeInput = document.getElementById("time");
+        const formatteredDate = now.toISOString().slice(0, 16);
+        timeInput.value = formatteredDate;
+      }
+
+      window.onload = function() {
+        setInitialTime();
+        loadLocations();
+        initMap();  
+      };
+
+      function saveLocation() {                              // 儲存資料
+        const timestamp = document.getElementById('time').value;
+
+        const data = {
+          latitude,
+          longitude,
+          address,
+          elevation,
+          timestamp
+        };
+
+        fetch('https://geodata-436609.de.r.appspot.com/locations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            alert('儲存成功！');
+            loadLocations();
+          } else {
+            alert('儲存失敗，請重試');
+          }
+        })
+        .catch(error => {
+          alert('儲存失敗，請重試');
+        });
+      }
+
+      function loadLocations() {                             // 加載最新資料
+        fetch('https://geodata-436609.de.r.appspot.com/locations')
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            updateLocationTable(data.locations);  
+          } else {
+            alert('無法加載資料');
+          }
+        })
+        .catch(error => {
+          alert('無法加載資料');
+        });
+      }
+
+      function updateLocationTable(locations) {              // 更新表格資料
+        const tableBody = document.getElementById('locationTableBody');
+        tableBody.innerHTML = '';  
+
+        const recentLocations = locations.slice(-10);
+
+        recentLocations.forEach((location, index) => {
+          const row = `<tr>
+                          <td>${index + 1}</td>
+                          <td>${location.latitude}</td>
+                          <td>${location.longitude}</td>
+                          <td>${location.address}</td>
+                          <td>${location.elevation}</td>
+                          <td>${location.timestamp}</td>
+                       </tr>`;
+          tableBody.innerHTML += row;
+        });
+      }
+    </script>
+  </head>
+
+  <body>
+    <h2>地理資料分析器</h2>
+    <h3>點擊地圖以獲取地理資訊:</h3>
+    <div id="map" style="height: 500px; width: 100%;"></div>
+    <div id="coordinates">點擊地圖以獲取地理資訊:</div>
+    <div id="location">地理資訊(行政區域)將會顯示於此</div>
+    <div id="elevation">地理資訊(海拔高度)將會顯示於此</div>
+    
+    <label for="time">選擇時間:</label>
+    <input type="datetime-local" id="time" name="time">
+    <button onclick="saveLocation()">儲存地理資訊</button>
+
+    <h3>最近儲存的地理資料(最新十筆):</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>緯度</th>
+          <th>經度</th>
+          <th>位置</th>
+          <th>海拔</th>
+          <th>時間</th>
+        </tr>
+      </thead>
+      <tbody id="locationTableBody">
+      </tbody>
+    </table>
+  </body>
+
+</html>
